@@ -1,0 +1,56 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.3.4'
+	id 'io.spring.dependency-management' version '1.1.6'
+}
+
+group = 'com.planit'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// 웹 + REST API
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+
+	// Firebase Admin SDK — ID 토큰 검증 + Firestore 접근 (방식 B)
+	implementation 'com.google.firebase:firebase-admin:9.2.0'
+
+	// Lombok
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// 테스트
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 프론트엔드(../frontend)는 별도 폴더에 있고, 빌드 시 정적 리소스로 복사한다.
+// 이렇게 하면 bootRun/bootJar 모두 http://localhost:8080/login.html 로 그대로 서빙된다.
+processResources {
+	from("$projectDir/../frontend") {
+		into 'static'
+	}
+	duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	// 참고: 경로에 한글이 섞여 있으면(예: 팀프로젝트/노예) Windows 기본 코드페이지에 따라
+	// 테스트 워커가 클래스를 못 찾는 경우가 있다. 영문 경로에 클론해서 실행하면 발생하지 않는다.
+	jvmArgs '-Dfile.encoding=UTF-8', '-Dsun.jnu.encoding=UTF-8'
+}

@@ -1,0 +1,43 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### VS Code ###
+.vscode/
+
+### 업로드/로컬 실행 파일 ###
+uploads/
+
+### 민감 정보 (실제 값은 절대 커밋 금지, application-local.yml 등으로 각자 관리) ###
+application-local.yml
+application-secret.yml
+.env
+
+### Firebase 서비스 계정 키 — 진짜 비밀키. 절대 커밋 금지, 노션/드라이브로만 전달 ###
+backend/src/main/resources/firebase-service-account.json
+firebase-service-account.json
+*-firebase-adminsdk-*.json

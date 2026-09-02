@@ -1,0 +1,23 @@
+:root {
+  --bg: #F7F2FA;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="time"] {
+  font-family: inherit;
+}

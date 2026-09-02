@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planit — 퀴즈봇</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/app.css" />
+  <!-- 방식 B: 이 페이지는 Firebase SDK 를 전혀 쓰지 않는다. 세션 쿠키로 /api/* 만 호출한다. -->
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/login.html">로그인</a>
+    <a href="/login.html#signup">회원가입</a>
+    <a href="/quiz.html">퀴즈봇</a>
+    <span class="spacer"></span>
+    <span id="who" class="who"></span>
+    <button id="logout-btn" class="hidden">로그아웃</button>
+    <button id="withdraw-btn" class="hidden">회원 탈퇴</button>
+  </nav>
+
+  <main class="wide">
+    <h1>오늘의 퀴즈</h1>
+
+    <div id="need-login" class="card hidden">
+      <p class="msg-error">
+        로그인이 필요합니다. <a href="/login.html">로그인하러 가기</a>
+      </p>
+    </div>
+
+    <div id="content" class="hidden">
+      <p class="sub">study_plan.json 의 1일차 학습 범위로 4지선다 3문제(쉬운 문제 2 + 응용 1)를 만듭니다.</p>
+
+      <div class="card">
+        <h2>오늘의 일과 (study_plan.json 1일차)</h2>
+        <p id="day-meta" class="sub"></p>
+        <ul id="day-items" class="dayone"></ul>
+        <p id="plan-err" class="msg-error hidden"></p>
+        <div class="btn-row">
+          <button id="reload-btn" class="btn btn-ghost">다시 불러오기</button>
+          <button id="start-btn" class="btn btn-gold">퀴즈 시작</button>
+        </div>
+        <p id="start-err" class="msg-error hidden"></p>
+      </div>
+
+      <div id="questions"></div>
+      <div id="score" class="quiz-score hidden"></div>
+    </div>
+  </main>
+
+  <script>
+    var $ = function (id) { return document.getElementById(id); };
+    var state = { quizId: null, total: 0, answered: 0 };
+
+    async function api(path, options) {
+      var res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, options));
+      var body = null;
+      try { body = await res.json(); } catch (e) {}
+      if (!res.ok) {
+        var m = (body && body.message) ? body.message : ('요청 실패 (' + res.status + ')');
+        var err = new Error(m); err.status = res.status; throw err;
+      }
+      return body;
+    }
+
+    function show(el) { el.classList.remove('hidden'); }
+    function hide(el) { el.classList.add('hidden'); }
+    function msg(el, text) { el.textContent = text; el.classList.remove('hidden'); }
+
+    // ── 로그인 확인 ──
+    async function checkAuth() {
+      try {
+        var me = await api('/api/auth/me');
+        var label = (me.name && me.name.trim()) ? me.name.trim() : (me.email || '');
+        $('who').textContent = label ? label + '님' : '';
+        show($('logout-btn'));
+        show($('withdraw-btn'));
+        show($('content'));
+        loadPlan();
+      } catch (e) {
+        show($('need-login'));
+      }
+    }
+
+    // ── 오늘의 일과 ──
+    async function loadPlan() {
+      hide($('plan-err'));
+      try {
+        var plan = await api('/api/quizzes/today-plan');
+        $('day-meta').textContent = '1일차 · ' + plan.date + ' · ' + plan.minutes + '분';
+        $('day-items').innerHTML = (plan.items || []).map(function (it) {
+          var meta = (it.pageRange ? it.pageRange + ' · ' : '') + it.status;
+          return '<li><span>' + escapeHtml(it.title) + '</span><span class="meta">' + escapeHtml(meta) + '</span></li>';
+        }).join('');
+      } catch (e) {
+        msg($('plan-err'), '오늘의 일과를 불러오지 못했습니다.');
+      }
+    }
+
+    // ── 퀴즈 시작 ──
+    $('start-btn').onclick = async function () {
+      hide($('start-err'));
+      var btn = $('start-btn');
+      btn.disabled = true; btn.textContent = '문제 만드는 중…';
+      try {
+        var quiz = await api('/api/quizzes', { method: 'POST', body: '{}' });
+        renderQuiz(quiz);
+      } catch (e) {
+        msg($('start-err'), e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = '퀴즈 시작';
+      }
+    };
+    $('reload-btn').onclick = loadPlan;
+    $('logout-btn').onclick = async function () {
+      try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+      location.href = '/login.html';
+    };
+    $('withdraw-btn').onclick = async function () {
+      if (!confirm('정말 탈퇴하시겠습니까?\n계정과 퀴즈 기록이 모두 삭제되며 되돌릴 수 없습니다.')) return;
+      $('withdraw-btn').disabled = true;
+      try {
+        await api('/api/auth/withdraw', { method: 'POST' });
+        // 탈퇴하면 계정이 사라지므로 "아이디 저장하기" 로 남겨둔 이메일도 지운다.
+        try { localStorage.removeItem('planit.rememberedEmail'); } catch (e) {}
+        alert('탈퇴가 완료되었습니다.');
+        location.href = '/login.html';
+      } catch (e) {
+        $('withdraw-btn').disabled = false;
+        alert('탈퇴 처리 중 오류가 발생했습니다: ' + e.message);
+      }
+    };
+
+    // ── 문제 렌더 ──
+    function renderQuiz(quiz) {
+      state.quizId = quiz.quizId;
+      state.total = quiz.questions.length;
+      state.answered = 0;
+      hide($('score'));
+      $('questions').innerHTML = '';
+
+      quiz.questions.forEach(function (q) {
+        var applied = q.questionType === 'APPLIED';
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML =
+          '<div><span class="q-badge ' + (applied ? 'applied' : 'basic') + '">' +
+            (applied ? '응용' : '기본') + '</span>' +
+            '<span class="q-no">' + q.questionNo + ' / ' + state.total + '</span></div>' +
+          '<p class="q-text">' + escapeHtml(q.questionText) + '</p>' +
+          '<ul class="q-choices">' +
+            [q.choice1, q.choice2, q.choice3, q.choice4].map(function (c, i) {
+              var no = i + 1;
+              return '<li><label><input type="radio" name="q' + q.questionNo + '" value="' + no + '"> ' +
+                no + '. ' + escapeHtml(c) + '</label></li>';
+            }).join('') +
+          '</ul>' +
+          '<button class="btn btn-primary" data-submit disabled>제출</button>' +
+          '<p class="q-result hidden"></p>';
+
+        var submitBtn = card.querySelector('[data-submit]');
+        var resultEl = card.querySelector('.q-result');
+        var radios = card.querySelectorAll('input[type=radio]');
+        radios.forEach(function (r) { r.onchange = function () { submitBtn.disabled = false; }; });
+
+        submitBtn.onclick = async function () {
+          var chosen = card.querySelector('input[type=radio]:checked');
+          if (!chosen) return;
+          submitBtn.disabled = true;
+          try {
+            var r = await api('/api/quizzes/' + state.quizId + '/answers/' + q.questionNo, {
+              method: 'POST',
+              body: JSON.stringify({ selectedChoice: Number(chosen.value) })
+            });
+            radios.forEach(function (x) { x.disabled = true; });
+            submitBtn.classList.add('hidden');
+            resultEl.className = 'q-result ' + (r.correct ? 'ok' : 'no');
+            resultEl.innerHTML = '<strong>' +
+              (r.correct ? '⭕ 정답이에요!' : ('❌ 오답이에요. 정답은 ' + r.answerNo + '번입니다.')) +
+              '</strong><br>' + escapeHtml(r.explanation);
+            state.answered += 1;
+            if (state.answered === state.total) loadSummary();
+          } catch (e) {
+            submitBtn.disabled = false;
+            msg($('start-err'), e.message);
+          }
+        };
+
+        $('questions').appendChild(card);
+      });
+      $('questions').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function loadSummary() {
+      try {
+        var s = await api('/api/quizzes/' + state.quizId + '/summary');
+        $('score').innerHTML =
+          '<div class="n">' + s.correctCount + ' / ' + s.totalQuestionCount + '</div>' +
+          '<div class="l">' + s.answeredCount + '문제 제출 · ' + s.correctCount + '문제 정답</div>';
+        show($('score'));
+        $('score').scrollIntoView({ behavior: 'smooth' });
+      } catch (e) {
+        msg($('start-err'), e.message);
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    checkAuth();
+  </script>
+</body>
+</html>

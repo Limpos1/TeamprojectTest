@@ -1,0 +1,113 @@
+/* 로그인/퀴즈 페이지 공용 스타일. 목업(index.html)의 색·폰트·버튼만 추림. */
+:root {
+  --ink: #1f2a44;
+  --ink-soft: #4a5570;
+  --paper: #f4f3ef;
+  --paper-alt: #ebe9e2;
+  --card: #fff;
+  --gold: #d9a441;
+  --sage: #5b8c6e;
+  --sage-soft: #e1eee4;
+  --coral: #c9694f;
+  --coral-soft: #f5dfd8;
+  --border: #dedbd3;
+  --shadow: 0 8px 24px rgba(31, 42, 68, 0.08);
+  --radius: 14px;
+  --display: "Space Grotesk", "Inter", sans-serif;
+  --body: "Inter", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --mono: "JetBrains Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); font-family: var(--body); }
+a { color: var(--gold); font-weight: 600; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: 0.9em; background: var(--paper-alt); padding: 1px 5px; border-radius: 4px; }
+
+.topnav {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 18px; background: var(--ink); color: #c9cedb;
+  font-family: var(--mono); font-size: 13px;
+}
+.topnav a { color: #c9cedb; font-weight: 500; }
+.topnav a:hover { color: #fff; text-decoration: none; }
+.topnav .spacer { flex: 1; }
+.topnav .who { color: var(--gold); }
+.topnav button {
+  font-family: var(--body); font-size: 12px; font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.25); background: transparent; color: #fff;
+  border-radius: 100px; padding: 5px 12px; cursor: pointer;
+}
+.topnav button:hover:not(:disabled) { border-color: var(--gold); }
+.topnav button:disabled { opacity: 0.5; cursor: default; }
+[data-langswitch] { display: inline-flex; gap: 4px; }
+[data-langswitch] button { padding: 4px 9px; font-size: 11px; }
+[data-langswitch] button.active { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+
+main { max-width: 440px; margin: 48px auto; padding: 0 20px; }
+main.wide { max-width: 760px; }
+h1 { font-family: var(--display); font-size: 28px; margin: 0 0 20px; }
+h2 { font-family: var(--display); font-size: 18px; margin: 0 0 12px; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 30px;
+}
+.card + .card { margin-top: 16px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.field label { font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.field input {
+  font-family: var(--body); font-size: 14px; padding: 12px 14px;
+  border: 1.5px solid var(--border); border-radius: 10px; background: #fff; color: var(--ink);
+  outline: none; transition: border-color 0.15s ease;
+}
+.field input:focus { border-color: var(--gold); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); margin-bottom: 16px; }
+
+.btn {
+  font-family: var(--body); font-weight: 600; font-size: 14px; border: none; cursor: pointer;
+  border-radius: 10px; padding: 12px 22px; transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn-block { width: 100%; }
+.btn-primary { background: var(--ink); color: #fff; }
+.btn-gold { background: var(--gold); color: var(--ink); }
+.btn-ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--border); }
+.btn-row { display: flex; gap: 10px; margin-top: 8px; }
+
+.sub { color: var(--ink-soft); font-size: 14px; margin: 0 0 24px; }
+.msg-error { color: #dc2626; font-size: 13px; margin: 4px 0 12px; }
+.msg-ok { color: var(--sage); font-size: 13px; margin: 4px 0 12px; }
+.divider { display: flex; align-items: center; gap: 12px; color: var(--ink-soft); font-size: 12px; margin: 16px 0; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.switch-line { text-align: center; margin-top: 20px; font-size: 13px; color: var(--ink-soft); }
+.hidden { display: none; }
+
+.dayone { list-style: none; padding: 0; margin: 10px 0 16px; }
+.dayone li {
+  display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px;
+  padding: 7px 0; border-top: 1px solid var(--paper-alt);
+}
+.dayone li:first-child { border-top: none; }
+.dayone .meta { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); flex: 0 0 auto; }
+
+.q-badge { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 100px; }
+.q-badge.basic { background: var(--sage-soft); color: var(--sage); }
+.q-badge.applied { background: #f3e2bc; color: #9a6b12; }
+.q-no { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); margin-left: 8px; }
+.q-text { font-size: 15px; line-height: 1.7; font-weight: 600; margin: 12px 0 14px; }
+.q-choices { list-style: none; padding: 0; margin: 0 0 14px; display: flex; flex-direction: column; gap: 8px; }
+.q-choices label { display: block; border: 1.5px solid var(--border); border-radius: 10px; padding: 11px 14px; font-size: 14px; cursor: pointer; }
+.q-choices input { margin-right: 8px; }
+.q-result { margin: 8px 0 0; padding: 12px 14px; border-radius: 10px; font-size: 13.5px; line-height: 1.6; }
+.q-result.ok { background: var(--sage-soft); }
+.q-result.no { background: var(--coral-soft); }
+.quiz-score { text-align: center; background: var(--ink); color: #fff; border-radius: var(--radius); padding: 28px; }
+.quiz-score .n { font-family: var(--display); font-size: 36px; font-weight: 700; color: var(--gold); }
+.quiz-score .l { font-size: 13px; color: #c9cedb; margin-top: 6px; }
+
+@media (max-width: 520px) {
+  main { margin: 24px auto; }
+  .card { padding: 22px; }
+}

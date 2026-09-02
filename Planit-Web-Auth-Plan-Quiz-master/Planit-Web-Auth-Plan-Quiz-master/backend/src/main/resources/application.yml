@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: planit
+
+# 방식 B: 데이터는 Spring 이 Firebase Admin SDK 로 Firestore 에 저장한다. MySQL/JPA 없음.
+# 서비스 계정 키는 src/main/resources/firebase-service-account.json (커밋 금지, .gitignore 참고).
+
+# 8080은 팀원의 체크리스트 백엔드(Planit-Web-Checklist-main)가 이미 쓰고 있어서 겹친다.
+# 이 로그인/퀴즈 백엔드는 8081을 쓴다.
+server:
+  port: 8081
+  servlet:
+    session:
+      timeout: 7d   # 로그인 세션 유지 기간

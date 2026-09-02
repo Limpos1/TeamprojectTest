@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planit — 로그인</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/app.css" />
+  <!-- 방식 B: 브라우저는 Firebase Auth 만 쓴다. Firestore SDK 는 로드하지 않는다. -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/login.html">로그인</a>
+    <a href="/login.html#signup">회원가입</a>
+    <a href="/quiz.html">퀴즈봇</a>
+    <span class="spacer"></span>
+  </nav>
+
+  <!-- 로그인 -->
+  <main id="login-view">
+    <h1>로그인</h1>
+    <div class="card">
+      <p class="sub">이어서 계획을 확인하려면 로그인하세요.</p>
+      <div class="field">
+        <label for="login-email">이메일</label>
+        <input id="login-email" type="email" autocomplete="email" placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label for="login-password">비밀번호</label>
+        <input id="login-password" type="password" autocomplete="current-password" placeholder="••••••••" />
+      </div>
+      <label class="check">
+        <input id="remember" type="checkbox" />
+        <span>아이디 저장하기</span>
+      </label>
+      <p id="login-msg" class="msg-error hidden"></p>
+      <button id="login-btn" class="btn btn-primary btn-block">로그인</button>
+      <div class="divider"><span>또는</span></div>
+      <button id="google-btn" class="btn btn-ghost btn-block">구글로 로그인하기</button>
+      <p class="switch-line">
+        계정이 없으신가요? <a href="#" id="to-signup">회원가입</a>
+      </p>
+    </div>
+  </main>
+
+  <!-- 회원가입 -->
+  <main id="signup-view" class="hidden">
+    <h1>회원가입</h1>
+    <div class="card">
+      <p class="sub">1분이면 충분해요. 가입하면 로그인 화면으로 이동합니다.</p>
+      <div class="field">
+        <label for="su-name">이름</label>
+        <input id="su-name" type="text" autocomplete="name" placeholder="홍길동" />
+      </div>
+      <div class="field">
+        <label for="su-email">이메일</label>
+        <input id="su-email" type="email" autocomplete="email" placeholder="you@example.com" />
+        <p id="su-email-msg" class="msg-error hidden"></p>
+      </div>
+      <div class="field">
+        <label for="su-password">비밀번호</label>
+        <input id="su-password" type="password" autocomplete="new-password" placeholder="6자 이상" />
+      </div>
+      <div class="field">
+        <label for="su-password2">비밀번호 확인</label>
+        <input id="su-password2" type="password" autocomplete="new-password" placeholder="다시 입력" />
+      </div>
+      <p id="su-msg" class="msg-error hidden"></p>
+      <button id="su-btn" class="btn btn-gold btn-block">회원가입 완료</button>
+      <p class="switch-line">
+        이미 계정이 있으신가요? <a href="#" id="to-login">로그인</a>
+      </p>
+    </div>
+  </main>
+
+  <script>
+    // ── Firebase (Auth 전용) ───────────────────────────────────────────
+    // 이 값들은 공개돼도 되는 웹용 config 다 (서비스 계정 키와는 완전히 다름).
+    var firebaseConfig = {
+      apiKey: 'AIzaSyARjWc5NK1owKyP2WsXRGVILj_BLBRnEb4',
+      authDomain: 'planit-ccfff.firebaseapp.com',
+      projectId: 'planit-ccfff'
+    };
+    var configReady = firebaseConfig.apiKey && firebaseConfig.apiKey.indexOf('AIza') === 0;
+    if (configReady) firebase.initializeApp(firebaseConfig);
+
+    var REMEMBER_KEY = 'planit.rememberedEmail';
+    var $ = function (id) { return document.getElementById(id); };
+
+    function showMsg(el, text) { el.textContent = text; el.classList.remove('hidden'); }
+    function hideMsg(el) { el.textContent = ''; el.classList.add('hidden'); }
+
+    function authErrorMessage(err) {
+      switch (err && err.code) {
+        case 'auth/invalid-email': return '이메일 형식이 올바르지 않습니다.';
+        case 'auth/email-already-in-use': return '이미 사용 중인 이메일입니다.';
+        case 'auth/weak-password': return '비밀번호는 6자 이상이어야 합니다.';
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential': return '이메일 또는 비밀번호가 올바르지 않습니다.';
+        case 'auth/too-many-requests': return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+        case 'auth/network-request-failed': return '네트워크 오류가 발생했습니다. 연결 상태를 확인해 주세요.';
+        case 'auth/popup-blocked': return '브라우저가 팝업을 차단했습니다. 팝업을 허용한 뒤 다시 시도해 주세요.';
+        case 'auth/popup-closed-by-user':
+        case 'auth/cancelled-popup-request': return '';
+        default: return (err && err.message) || '로그인에 실패했습니다.';
+      }
+    }
+
+    // ── 로그인 성공 후: idToken 을 서버에 보내 세션 발급받고 퀴즈로 이동 ──
+    async function exchangeTokenAndGo(user) {
+      var idToken = await user.getIdToken();
+      var res = await fetch('/api/auth/firebase-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: idToken })
+      });
+      if (!res.ok) throw new Error('서버 인증에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      location.href = '/quiz.html';
+    }
+
+    // ── 로그인 ──
+    $('login-btn').onclick = async function () {
+      hideMsg($('login-msg'));
+      if (!configReady) { showMsg($('login-msg'), 'Firebase 설정이 채워지지 않았습니다. login.html 의 firebaseConfig 를 확인하세요.'); return; }
+      var email = $('login-email').value.trim();
+      var pw = $('login-password').value;
+      if (!email || !pw) { showMsg($('login-msg'), '이메일과 비밀번호를 입력해 주세요.'); return; }
+
+      var btn = $('login-btn');
+      btn.disabled = true; btn.textContent = '로그인 중…';
+      try {
+        var cred = await firebase.auth().signInWithEmailAndPassword(email, pw);
+        if ($('remember').checked) localStorage.setItem(REMEMBER_KEY, email);
+        else localStorage.removeItem(REMEMBER_KEY);
+        await exchangeTokenAndGo(cred.user);
+      } catch (err) {
+        showMsg($('login-msg'), authErrorMessage(err) || '로그인에 실패했습니다.');
+      } finally {
+        btn.disabled = false; btn.textContent = '로그인';
+      }
+    };
+
+    // ── 구글 로그인 ──
+    $('google-btn').onclick = async function () {
+      hideMsg($('login-msg'));
+      if (!configReady) { showMsg($('login-msg'), 'Firebase 설정이 채워지지 않았습니다. login.html 의 firebaseConfig 를 확인하세요.'); return; }
+      var btn = $('google-btn');
+      btn.disabled = true; btn.textContent = '구글 로그인 중…';
+      try {
+        var provider = new firebase.auth.GoogleAuthProvider();
+        var cred = await firebase.auth().signInWithPopup(provider);
+        await exchangeTokenAndGo(cred.user);
+      } catch (err) {
+        var msg = authErrorMessage(err);
+        if (msg) showMsg($('login-msg'), msg);
+      } finally {
+        btn.disabled = false; btn.textContent = '구글로 로그인하기';
+      }
+    };
+
+    // ── 회원가입 ──
+    $('su-btn').onclick = async function () {
+      hideMsg($('su-msg'));
+      hideMsg($('su-email-msg'));
+      if (!configReady) { showMsg($('su-msg'), 'Firebase 설정이 채워지지 않았습니다. login.html 의 firebaseConfig 를 확인하세요.'); return; }
+      var name = $('su-name').value.trim();
+      var email = $('su-email').value.trim();
+      var pw = $('su-password').value;
+      var pw2 = $('su-password2').value;
+      if (!name) { showMsg($('su-msg'), '이름을 입력해 주세요.'); return; }
+      if (!email) { showMsg($('su-email-msg'), '이메일을 입력해 주세요.'); return; }
+      if (pw.length < 6) { showMsg($('su-msg'), '비밀번호는 6자 이상이어야 합니다.'); return; }
+      if (pw !== pw2) { showMsg($('su-msg'), '비밀번호가 일치하지 않습니다.'); return; }
+
+      var btn = $('su-btn');
+      btn.disabled = true; btn.textContent = '처리 중…';
+      try {
+        // 이메일 중복 확인 (방식 B: 서버가 Admin SDK 로 판정). 중복이면 이메일 칸 밑에 안내하고 중단.
+        var chkRes = await fetch('/api/auth/email-available', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email })
+        });
+        if (chkRes.ok) {
+          var chk = await chkRes.json();
+          if (!chk.available) { showMsg($('su-email-msg'), '사용할 수 없는 이메일 입니다'); return; }
+        }
+        var cred = await firebase.auth().createUserWithEmailAndPassword(email, pw);
+        await cred.user.updateProfile({ displayName: name });
+        // 가입 후 로그아웃하고 로그인 화면으로. 안내 문구·이메일 자동입력 없이 그냥 전환한다.
+        await firebase.auth().signOut();
+        showView('login');
+      } catch (err) {
+        // 서버 확인을 통과했더라도 그 사이 선점됐을 수 있음(2차 방어).
+        if (err && err.code === 'auth/email-already-in-use') {
+          showMsg($('su-email-msg'), '사용할 수 없는 이메일 입니다');
+        } else {
+          showMsg($('su-msg'), authErrorMessage(err) || '회원가입에 실패했습니다.');
+        }
+      } finally {
+        btn.disabled = false; btn.textContent = '회원가입 완료';
+      }
+    };
+
+    // ── 뷰 전환 ──
+    function showView(which) {
+      $('login-view').classList.toggle('hidden', which !== 'login');
+      $('signup-view').classList.toggle('hidden', which !== 'signup');
+    }
+    $('to-signup').onclick = function (e) { e.preventDefault(); location.hash = 'signup'; showView('signup'); };
+    $('to-login').onclick = function (e) { e.preventDefault(); location.hash = ''; showView('login'); };
+
+    // nav 의 "회원가입" 링크(/login.html#signup) 로 들어오면 회원가입 뷰를 연다.
+    function applyHash() { showView(location.hash === '#signup' ? 'signup' : 'login'); }
+    window.addEventListener('hashchange', applyHash);
+    applyHash();
+
+    // ── 초기: 저장된 이메일 복원 ("아이디 저장하기" 를 체크하고 로그인한 적이 있을 때만) ──
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem(REMEMBER_KEY); } catch (e) {}
+      if (saved) { $('login-email').value = saved; $('remember').checked = true; }
+    })();
+  </script>
+</body>
+</html>

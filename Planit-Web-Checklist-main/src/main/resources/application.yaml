@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: project_checklist
+
+# Firebase(Firestore) 연결 설정.
+# credentials-path 는 src/main/resources 아래에 있는 서비스 계정 키 파일의 이름입니다.
+# 이 키 파일은 절대 git에 커밋하지 마세요 (.gitignore 에 이미 추가돼 있습니다).
+# 자세한 발급 방법은 FirebaseConfig.java 상단 주석 참고.
+firebase:
+  credentials-path: firebase-service-account.json
