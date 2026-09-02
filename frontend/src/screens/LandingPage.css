@@ -1,0 +1,236 @@
+:root {
+  --bg: #fbefef;
+  --surface: #fffbf9;
+  --ink: #4b3b47;
+  --ink-soft: #8b7488;
+  --ink-faint: #c2a9b4;
+
+  --lav: #c5b3d3;
+  --lav-deep: #a98fc2;
+  --lav-soft: #efe8f5;
+
+  --accent: #f5cbcb;
+  --accent-deep: #dfa9a9;
+  --accent-soft: #ffe2e2;
+  --accent-ink: #a9576b;
+
+  --line: #f7dce0;
+  --shadow: 0 10px 28px rgba(150, 110, 140, 0.1);
+  --shadow-sm: 0 4px 16px rgba(150, 110, 140, 0.08);
+}
+
+.landing {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Gowun Dodum', sans-serif;
+}
+
+/* 상단 네비게이션 */
+.landing-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 40px;
+}
+
+.landing-logo {
+  font-family: 'Gowun Dodum', sans-serif;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.landing-logo .dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--lav);
+  display: inline-block;
+}
+
+/* 버튼 공통 */
+.btn {
+  font-family: 'Gowun Dodum', sans-serif;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  border-radius: 100px;
+  padding: 11px 21px;
+  border: 1.5px solid var(--line);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn-lav {
+  background: var(--lav-deep);
+  color: #fff;
+  border-color: var(--lav-deep);
+  box-shadow: 0 6px 16px rgba(169, 143, 194, 0.45);
+}
+
+.btn-white {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 히어로 */
+.hero {
+  padding: 20px 40px 60px;
+  max-width: 640px;
+}
+
+.hero .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--lav-deep);
+  background: var(--lav-soft);
+  padding: 6px 14px;
+  border-radius: 100px;
+  margin-bottom: 16px;
+}
+
+.hero h1 {
+  font-family: 'Gowun Dodum', sans-serif;
+  font-weight: 700;
+  font-size: clamp(27px, 3.8vw, 37px);
+  line-height: 1.44;
+  margin: 0 0 16px;
+  color: #3a2a38;
+}
+
+.hero p {
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  line-height: 1.8;
+  max-width: 420px;
+  margin-bottom: 26px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* 기능 소개 카드 */
+.section {
+  padding: 40px;
+}
+
+.section h2 {
+  font-family: 'Gowun Dodum', sans-serif;
+  font-weight: 400;
+  font-size: 24px;
+  margin: 0 0 8px;
+}
+
+.feature-grid {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.feature-card {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: var(--shadow-sm);
+  flex: 1 1 220px;
+}
+
+.feature-card .tag {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--lav-deep);
+  background: var(--lav-soft);
+  padding: 4px 10px;
+  border-radius: 100px;
+  margin-bottom: 10px;
+}
+
+.feature-card h3 {
+  font-family: 'Gowun Dodum', sans-serif;
+  font-weight: 400;
+  font-size: 15.5px;
+  margin: 0 0 8px;
+}
+
+.feature-card p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+/* 후기 */
+.testimonial-grid {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.testimonial-grid > div {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  flex: 1 1 220px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.testimonial-grid .who {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+/* CTA 밴드 */
+.cta-band {
+  max-width: 940px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 52px 40px;
+  background: linear-gradient(
+    160deg,
+    var(--lav-soft) 0%,
+    var(--accent-soft) 100%
+  );
+  border: 1.5px solid var(--line);
+  border-radius: 32px;
+  box-shadow: var(--shadow);
+}
+
+.cta-band h2 {
+  font-family: 'Gowun Dodum', sans-serif;
+  font-weight: 400;
+  font-size: 26px;
+  margin: 0 0 14px;
+}
+
+/* 푸터   font-family: 'Pretendard Variable', sans-serif;*/
+.landing-footer {
+  padding: 26px 40px 44px;
+  max-width: 1040px;
+  margin: 0 auto;
+  font-family: 'Gowun Dodum', sans-serif;
+  font-size: 11px;
+  color: var(--ink-faint);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}

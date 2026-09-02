@@ -7,6 +7,9 @@ import AvailabilityScreen from "./screens/AvailabilityScreen";
 import GeneratingScreen from "./screens/GeneratingScreen";
 import MainScreen from "./screens/MainScreen";
 import LoginScreen from "./screens/LoginScreen";
+import LandingPage from "./screens/LandingPage";
+import LoginPage from "./screens/LoginPage";
+import SignupPage from "./screens/SignupPage";
 import { filterParsedToc, rangeMinutes } from "./lib/toc";
 import { s } from "./theme";
 
@@ -177,9 +180,15 @@ function AppRoutes() {
 
   // 로그인 안 돼 있으면 어떤 경로로 들어왔든 로그인 화면부터 보여준다
   // (마법사/메인페이지 둘 다 이 아래에서 막힌다).
-  if (!userId) {
-    return <LoginScreen onLoggedIn={handleLoggedIn} />;
+if (!userId) {
+  if (location.pathname === "/login") {
+    return <LoginPage onLoggedIn={handleLoggedIn} onGoSignup={() => navigate("/signup")} />;
   }
+  if (location.pathname === "/signup") {
+    return <SignupPage onGoLogin={() => navigate("/login")} />;
+  }
+  return <LandingPage onNavigate={navigate} />;
+}
 
   // 이미 로그인된 채로(브라우저에 userId가 남아있는 채로) 사이트 루트("/")로
   // 들어온 경우 — 예: 주소창에 직접 쳐서 들어오거나 새로고침. 아래 STEP_ROUTES/
