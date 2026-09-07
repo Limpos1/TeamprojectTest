@@ -16,12 +16,10 @@ from pydantic import BaseModel
 
 from api_call import parse_toc_from_images, parse_toc_from_text
 from pdf_extract import extract_toc_text
-from schedule import generate_plan_from_leaves, generate_study_plan
+from schedule import generate_study_plan
 from checklist_sync import (
-    compute_remaining_leaves,
     fetch_plan_from_firestore,
     fetch_plan_meta,
-    fetch_raw_items_from_firestore,
     member_id_for_user,
     move_item_in_firestore,
     push_plan_to_firestore,
@@ -155,22 +153,11 @@ async def generate_plan(req: GeneratePlanRequest):
 
     if req.userId:
         _require_firestore_credentials()
-        study_plan_id = study_plan_id_for_user(req.userId)
         try:
             push_plan_to_firestore(
                 result,
                 member_id=member_id_for_user(req.userId),
-                study_plan_id=study_plan_id,
-                credentials_path=CHECKLIST_FIREBASE_CREDENTIALS,
-            )
-            # "계획 다시 생성하기"(남은 분량만 재배분)가 나중에 목차를 다시 안 받고도
-            # 동작하려면, 지금 쓴 원본 목차와 배분 결과를 같이 저장해둬야 한다.
-            save_plan_meta(
-                study_plan_id=study_plan_id,
-                parsed_toc=req.parsedToc,
-                target_date=req.targetDate.isoformat(),
-                weekday_minutes=req.weekdayMinutes,
-                generated_days=result["days"],
+                study_plan_id=study_plan_id_for_user(req.userId),
                 credentials_path=CHECKLIST_FIREBASE_CREDENTIALS,
             )
         except Exception as e:
@@ -179,102 +166,48 @@ async def generate_plan(req: GeneratePlanRequest):
     return result
 
 
-class ReplanRequest(BaseModel):
+class SaveTocRequest(BaseModel):
     """
-    "계획 다시 생성하기" 요청. 목차를 다시 올릴 필요 없이, 이미 저장해둔
-    원본 목차(study_plans/{studyPlanId})에서 완료된 만큼을 빼고 남은 분량만 오늘부터
-    다시 배분한다.
-
-    targetDate: 생략하면 처음 생성할 때 정했던 목표일을 그대로 쓴다. 목표일이 이미
-                지났으면(오늘보다 과거) 새 목표일을 반드시 넣어야 한다.
-    checkedDates: 생략하면 오늘~목표일 사이 모든 날짜를 학습 가능일로 본다. 지정하면
-                  그 목록에 없는 날짜는 제외일로 처리한다(기존 /generate-plan과 동일).
+    UploadScreen에서 목차 파싱(AI 분석)이 막 끝난 원본 parsedToc(과목 선택 전, 필터링
+    전 전체 목차)을 저장해둘 때 쓴다. "계획 다시 생성하기"를 누르면 사진 촬영/AI 분석
+    단계 없이 이 원본을 그대로 다시 불러와서 과목 선택 화면부터 마법사를 다시 태운다.
     """
-    targetDate: date | None = None
-    checkedDates: list[date] | None = None
+    parsedToc: dict
 
 
-@app.post("/plans/{user_id}/replan")
-async def replan(user_id: str, req: ReplanRequest):
+@app.put("/plans/{user_id}/toc")
+async def save_toc(user_id: str, req: SaveTocRequest):
+    _require_firestore_credentials()
+    try:
+        save_plan_meta(
+            study_plan_id=study_plan_id_for_user(user_id),
+            parsed_toc=req.parsedToc,
+            credentials_path=CHECKLIST_FIREBASE_CREDENTIALS,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"목차 저장 실패: {e}")
+    return {"status": "ok"}
+
+
+@app.get("/plans/{user_id}/toc")
+async def get_toc(user_id: str):
     """
-    메인페이지의 "계획 다시 생성하기" 버튼이 호출하는 엔드포인트. 완료 표시해둔
-    항목/기록은 그대로 두고(과거 날짜 항목은 안 건드림), 오늘 이후로 아직 안 끝난
-    단원의 남은 페이지만 다시 날짜별로 배분해서 study_plan_items를 갱신한다.
+    "계획 다시 생성하기" 버튼이 호출한다. 저장해둔 원본 목차가 있으면 그걸 그대로
+    돌려줘서, 프론트가 목차 업로드 단계를 건너뛰고 과목 선택 화면부터 마법사를
+    다시 시작할 수 있게 한다.
     """
     _require_firestore_credentials()
-    study_plan_id = study_plan_id_for_user(user_id)
-
     try:
-        meta = fetch_plan_meta(study_plan_id, credentials_path=CHECKLIST_FIREBASE_CREDENTIALS)
+        meta = fetch_plan_meta(study_plan_id_for_user(user_id), credentials_path=CHECKLIST_FIREBASE_CREDENTIALS)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"기존 플랜 정보 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"목차 조회 실패: {e}")
 
     if meta is None:
         raise HTTPException(
             status_code=404,
-            detail="재생성할 기존 플랜이 없습니다. 목차 업로드부터 다시 진행해주세요.",
+            detail="저장된 목차가 없습니다. 목차 업로드부터 다시 진행해주세요.",
         )
-
-    today = date.today()
-    target_date = req.targetDate or date.fromisoformat(meta["targetDate"])
-    if target_date < today:
-        raise HTTPException(
-            status_code=400,
-            detail="기존 목표일이 이미 지났습니다. 새 목표일(targetDate)을 함께 보내주세요.",
-        )
-
-    all_days = []
-    d = today
-    while d <= target_date:
-        all_days.append(d)
-        d += timedelta(days=1)
-    checked_set = set(req.checkedDates) if req.checkedDates else set(all_days)
-    excluded_dates = [d for d in all_days if d not in checked_set]
-
-    try:
-        raw_items = fetch_raw_items_from_firestore(study_plan_id, credentials_path=CHECKLIST_FIREBASE_CREDENTIALS)
-        remaining_leaves = compute_remaining_leaves(meta["parsedToc"], meta["generatedDays"], raw_items)
-        result = generate_plan_from_leaves(
-            remaining_leaves,
-            start_date=today,
-            target_date=target_date,
-            weekday_minutes=meta["weekdayMinutes"],
-            excluded_dates=excluded_dates,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"재배분 계산 실패: {e}")
-
-    try:
-        # 오늘 이전(이미 지나간) 항목은 그대로 두고, 오늘 이후 항목만 지우고 새로 쓴다.
-        push_plan_to_firestore(
-            result,
-            member_id=member_id_for_user(user_id),
-            study_plan_id=study_plan_id,
-            credentials_path=CHECKLIST_FIREBASE_CREDENTIALS,
-            clear_from_date=today.isoformat(),
-        )
-        # generatedDays는 이번 재배분 결과로 통째로 덮어쓰지 않고, 오늘 이전(이미
-        # 지나간) 날짜분은 예전 기록을 그대로 이어붙인다 - 안 그러면 "재생성을 두 번
-        # 연속으로 했을 때, 1차 재생성 이전에 이미 다 끝낸 단원의 완료 기록이 사라져서
-        # 그 단원이 남은 분량으로 되살아나는" 문제가 생긴다 (compute_remaining_leaves가
-        # 단원별 완료 페이지를 generatedDays에서 찾아서 계산하기 때문).
-        old_days = meta.get("generatedDays", [])
-        today_str = today.isoformat()
-        kept_past_days = [d for d in old_days if d["date"] < today_str]
-        save_plan_meta(
-            study_plan_id=study_plan_id,
-            parsed_toc=meta["parsedToc"],
-            target_date=target_date.isoformat(),
-            weekday_minutes=meta["weekdayMinutes"],
-            generated_days=kept_past_days + result["days"],
-            credentials_path=CHECKLIST_FIREBASE_CREDENTIALS,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"재생성된 플랜 저장 실패: {e}")
-
-    plan = fetch_plan_from_firestore(study_plan_id, credentials_path=CHECKLIST_FIREBASE_CREDENTIALS)
-    plan["memberId"] = member_id_for_user(user_id)
-    return plan
+    return {"parsedToc": meta["parsedToc"]}
 
 
 @app.get("/plans/{user_id}")

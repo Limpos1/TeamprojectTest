@@ -10,7 +10,7 @@ import LoginScreen from "./screens/LoginScreen";
 import LandingPage from "./screens/LandingPage";
 import LoginPage from "./screens/LoginPage";
 import SignupPage from "./screens/SignupPage";
-import { filterParsedToc, rangeMinutes } from "./lib/toc";
+import { filterParsedToc, getLeafUnits, rangeMinutes } from "./lib/toc";
 import { s } from "./theme";
 
 const API_BASE = "http://localhost:8000";
@@ -25,6 +25,25 @@ const STEP_ROUTES = [
   { path: "/availability", label: "가용 시간" },
   { path: "/generating", label: "생성 중" },
 ];
+
+// 재생성 시 SelectUnitsScreen에 "이미 100% 끝낸 단원은 기본으로 체크 해제된
+// 채로" 보여주기 위해, 현재 플랜(days)에서 각 leaf(단원)에 해당하는 항목들을
+// content 텍스트로 찾아서 전부 progressRate=100인지 본다. content는
+// checklist_sync.build_study_plan_items()가 "제목 (페이지범위)" 형태로 저장하므로
+// leaf.title과 정확히 같거나 그 뒤에 " ("가 붙은 것만 그 단원 것으로 본다.
+function completedLeafKeys(leaves, days) {
+  const items = (days || []).flatMap((day) => day.items || []);
+  const done = new Set();
+  leaves.forEach((leaf) => {
+    const matches = items.filter(
+      (it) => it.content === leaf.title || (it.content || "").startsWith(`${leaf.title} (`)
+    );
+    if (matches.length > 0 && matches.every((it) => it.progressRate === 100)) {
+      done.add(leaf.key);
+    }
+  });
+  return [...done];
+}
 
 function buildWeekdayMinutes({ weekdayRange, weekendRange, weekendExcluded }) {
   const weekdayMinutes = rangeMinutes(weekdayRange);
@@ -65,6 +84,9 @@ function AppRoutes() {
 
   const [parsedToc, setParsedToc] = useState(null);
   const [filteredToc, setFilteredToc] = useState(null);
+  // 재생성이 아니라 목차를 새로 업로드한 경우엔 항상 빈 배열 - 전부 체크된
+  // 상태로 시작해야 한다. 재생성일 때만 handleStartReplan이 채워준다.
+  const [initialExcludedKeys, setInitialExcludedKeys] = useState([]);
   const [calendarInfo, setCalendarInfo] = useState(null);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
@@ -104,7 +126,52 @@ function AppRoutes() {
 
   const handleParsed = (data) => {
     setParsedToc(data);
+    setInitialExcludedKeys([]); // 새로 업로드한 목차는 항상 전부 체크된 상태로 시작
+    // "계획 다시 생성하기"가 나중에 사진 촬영/AI 분석 없이 바로 과목 선택부터
+    // 다시 시작할 수 있게, 방금 분석된 원본 목차(과목 선택으로 거르기 전)를
+    // 서버에 저장해둔다. 실패해도 지금 진행 중인 마법사는 그대로 계속되게
+    // 흐름을 막지 않는다 - 재생성 기능만 나중에 못 쓰게 될 뿐이다.
+    const userId = localStorage.getItem("userId") || "guest";
+    fetch(`${API_BASE}/plans/${userId}/toc`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parsedToc: data }),
+    }).catch(() => {});
     navigate("/select");
+  };
+
+  // "계획 다시 생성하기": 메인화면에서 누르면 사진 촬영/AI 분석 단계는 건너뛰고,
+  // 저장해둔 원본 목차를 그대로 불러와서 과목 선택(/select) 화면부터 마법사를
+  // 다시 태운다. 저장된 목차가 없으면(한 번도 저장 안 된 예전 플랜 등) 업로드
+  // 화면으로 보낸다. 현재 플랜에서 이미 100% 끝낸 단원이 있으면, 과목 선택
+  // 화면에 그 단원들이 기본으로 체크 해제된 채로 나오게 미리 계산해둔다
+  // (완전히 자동으로 빼주는 건 아니고, 어디까지나 "기본값"이라 사용자가 다시
+  // 체크해서 되살릴 수도 있다).
+  const handleStartReplan = async () => {
+    const userId = localStorage.getItem("userId") || "guest";
+    try {
+      const res = await fetch(`${API_BASE}/plans/${userId}/toc`);
+      if (!res.ok) throw new Error("no-toc");
+      const data = await res.json();
+
+      let excluded = [];
+      try {
+        const planRes = await fetch(`${API_BASE}/plans/${userId}`);
+        if (planRes.ok) {
+          const plan = await planRes.json();
+          excluded = completedLeafKeys(getLeafUnits(data.parsedToc), plan.days);
+        }
+      } catch {
+        // 완료 항목 조회가 실패해도 재생성 자체는 계속 진행한다 - 기본값만 못 채울 뿐.
+      }
+
+      setParsedToc(data.parsedToc);
+      setInitialExcludedKeys(excluded);
+      navigate("/select");
+    } catch {
+      alert("저장된 목차를 찾을 수 없어요. 목차 업로드부터 다시 진행해주세요.");
+      navigate("/upload");
+    }
   };
 
   const handleUnitsSelected = (excludedKeys) => {
@@ -202,7 +269,7 @@ if (!userId) {
   // "/main"은 팀 전체 메인페이지 — 마법사 껍데기(스텝바/카드) 없이 MainScreen이
   // 자기 레이아웃을 통째로 그린다. 그 외 경로는 좁은 마법사 카드 안에서 보여준다.
   if (location.pathname === "/main") {
-    return <MainScreen />;
+    return <MainScreen onStartReplan={handleStartReplan} />;
   }
 
   const currentStepIndex = STEP_ROUTES.findIndex((r) => r.path === location.pathname);
@@ -230,7 +297,12 @@ if (!userId) {
           <Route
             path="/select"
             element={
-              <SelectUnitsScreen parsedToc={parsedToc} onNext={handleUnitsSelected} onBack={() => navigate("/upload")} />
+              <SelectUnitsScreen
+                parsedToc={parsedToc}
+                initialExcludedKeys={initialExcludedKeys}
+                onNext={handleUnitsSelected}
+                onBack={() => navigate("/upload")}
+              />
             }
           />
           <Route

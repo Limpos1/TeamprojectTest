@@ -120,7 +120,7 @@ function s_btnPrimary(disabled) {
   };
 }
 
-export default function MainScreen() {
+export default function MainScreen({ onStartReplan }) {
   const [plan, setPlan] = useState(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -189,41 +189,6 @@ export default function MainScreen() {
       await reloadPlan();
     } catch (e) {
       setActionMsg(e.message);
-    }
-  };
-
-  const [replanning, setReplanning] = useState(false);
-
-  // "계획 다시 생성하기": 예전엔 window.location.href="/calendar"로 마법사 3단계로
-  // 강제 이동시켜서 (a) parsedToc가 날아가 422 에러가 나고 (b) 설령 성공해도 완료
-  // 표시한 항목까지 포함해서 전부 새로 갈아치웠다. 지금은 페이지 이동 없이 바로
-  // 서버(POST /plans/{userId}/replan)를 호출한다 - 서버가 원본 목차(parsedToc)를
-  // Firestore에 이미 들고 있어서(save_plan_meta), 오늘 이전 완료 기록은 그대로 두고
-  // 남은 분량만 오늘부터 목표일까지 다시 배분해준다.
-  const handleReplan = async () => {
-    if (!window.confirm("오늘부터 남은 학습 분량을 다시 배분할까요? 완료 표시한 항목과 지난 기록은 그대로 유지됩니다.")) {
-      return;
-    }
-    setReplanning(true);
-    setActionMsg("");
-    try {
-      const res = await fetch(`${API_BASE}/plans/${userId}/replan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        const detail = errBody.detail;
-        throw new Error(typeof detail === "string" ? detail : `재생성 실패 (${res.status})`);
-      }
-      const data = await res.json();
-      setPlan(data);
-      setActionMsg("남은 학습 분량을 오늘부터 다시 배분했습니다.");
-    } catch (e) {
-      setActionMsg(e.message);
-    } finally {
-      setReplanning(false);
     }
   };
 
@@ -472,8 +437,8 @@ export default function MainScreen() {
 
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
             <button onClick={() => downloadJson(plan)} style={s_btnSecondary}>JSON으로 저장</button>
-            <button onClick={handleReplan} disabled={replanning} style={s_btnSecondary}>
-              {replanning ? "재배분 중…" : "계획 다시 생성하기"}
+            <button onClick={onStartReplan} style={s_btnSecondary}>
+              계획 다시 생성하기
             </button>
           </div>
         </div>

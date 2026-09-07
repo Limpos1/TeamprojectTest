@@ -2,11 +2,12 @@ import { useState } from "react";
 import { getLeafUnits } from "../lib/toc";
 import { s, theme } from "../theme";
 
-export default function SelectUnitsScreen({ parsedToc, onNext, onBack }) {
+export default function SelectUnitsScreen({ parsedToc, initialExcludedKeys = [], onNext, onBack }) {
   const leaves = getLeafUnits(parsedToc);
+  const completedKeys = new Set(initialExcludedKeys);
   const [checked, setChecked] = useState(() => {
     const initial = {};
-    leaves.forEach((l) => (initial[l.key] = true));
+    leaves.forEach((l) => (initial[l.key] = !completedKeys.has(l.key)));
     return initial;
   });
 
@@ -33,6 +34,11 @@ export default function SelectUnitsScreen({ parsedToc, onNext, onBack }) {
             <span style={{ flex: 1, fontSize: 14 }}>
               {leaf.parentTitle && <span style={{ color: theme.colors.textSoft }}>{leaf.parentTitle} · </span>}
               {leaf.title}
+              {completedKeys.has(leaf.key) && (
+                <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: theme.colors.primary }}>
+                  완료됨
+                </span>
+              )}
             </span>
             <span style={{ color: theme.colors.textSoft, fontSize: 12 }}>{leaf.pageInfo}</span>
           </label>
