@@ -20,6 +20,7 @@ from schedule import generate_study_plan
 from checklist_sync import (
     fetch_plan_from_firestore,
     fetch_plan_meta,
+    mark_leaves_excluded,
     member_id_for_user,
     move_item_in_firestore,
     push_plan_to_firestore,
@@ -115,6 +116,10 @@ class GeneratePlanRequest(BaseModel):
                   없는, 시작일~목표일 범위 안의 날짜는 전부 제외일로 처리한다.
     userId: 로그인 파트에서 내려주는 사용자 식별자. 있으면 생성된 플랜을 저장해서
             메인페이지가 나중에 /plans/{user_id}로 다시 조회할 수 있게 한다.
+    excludedLeafKeys: 과목 선택 화면에서 이번에 체크 해제한 단원들의 키
+                      (frontend/src/lib/toc.js의 getLeafUnits 키 규칙과 동일).
+                      "계획 다시 생성하기"를 또 눌렀을 때 이 단원들이 기본값에서
+                      다시 체크된 채로 나타나지 않게, study_plans에 영구 누적해둔다.
     """
     parsedToc: dict
     startDate: date
@@ -122,6 +127,7 @@ class GeneratePlanRequest(BaseModel):
     weekdayMinutes: dict[str, int]
     checkedDates: list[date]
     userId: str | None = None
+    excludedLeafKeys: list[str] = []
 
 
 @app.post("/generate-plan")
@@ -153,11 +159,17 @@ async def generate_plan(req: GeneratePlanRequest):
 
     if req.userId:
         _require_firestore_credentials()
+        study_plan_id = study_plan_id_for_user(req.userId)
         try:
             push_plan_to_firestore(
                 result,
                 member_id=member_id_for_user(req.userId),
-                study_plan_id=study_plan_id_for_user(req.userId),
+                study_plan_id=study_plan_id,
+                credentials_path=CHECKLIST_FIREBASE_CREDENTIALS,
+            )
+            mark_leaves_excluded(
+                study_plan_id,
+                req.excludedLeafKeys,
                 credentials_path=CHECKLIST_FIREBASE_CREDENTIALS,
             )
         except Exception as e:
@@ -207,7 +219,7 @@ async def get_toc(user_id: str):
             status_code=404,
             detail="저장된 목차가 없습니다. 목차 업로드부터 다시 진행해주세요.",
         )
-    return {"parsedToc": meta["parsedToc"]}
+    return {"parsedToc": meta["parsedToc"], "excludedLeafKeys": meta.get("excludedLeafKeys", [])}
 
 
 @app.get("/plans/{user_id}")

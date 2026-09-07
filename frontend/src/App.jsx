@@ -87,6 +87,9 @@ function AppRoutes() {
   // 재생성이 아니라 목차를 새로 업로드한 경우엔 항상 빈 배열 - 전부 체크된
   // 상태로 시작해야 한다. 재생성일 때만 handleStartReplan이 채워준다.
   const [initialExcludedKeys, setInitialExcludedKeys] = useState([]);
+  // SelectUnitsScreen에서 방금 체크 해제한 키 - /generate-plan 호출 시 서버에
+  // 같이 보내서 영구 기록(study_plans.excludedLeafKeys)으로 남긴다.
+  const [lastExcludedKeys, setLastExcludedKeys] = useState([]);
   const [calendarInfo, setCalendarInfo] = useState(null);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
@@ -154,19 +157,23 @@ function AppRoutes() {
       if (!res.ok) throw new Error("no-toc");
       const data = await res.json();
 
-      let excluded = [];
+      // 기본값 = (이번에 진행률로 새로 감지된 완료 단원) + (예전 회차에서
+      // 이미 제외했다고 서버에 기록해둔 단원). 후자가 없으면 제외했던 단원이
+      // 재생성할 때마다 자꾸 다시 체크된 채로 나타난다 - 제외되면 그 회차엔
+      // study_plan_items가 아예 안 생겨서 진행률로는 더 이상 감지가 안 되기 때문.
+      let excluded = new Set(data.excludedLeafKeys || []);
       try {
         const planRes = await fetch(`${API_BASE}/plans/${userId}`);
         if (planRes.ok) {
           const plan = await planRes.json();
-          excluded = completedLeafKeys(getLeafUnits(data.parsedToc), plan.days);
+          completedLeafKeys(getLeafUnits(data.parsedToc), plan.days).forEach((k) => excluded.add(k));
         }
       } catch {
         // 완료 항목 조회가 실패해도 재생성 자체는 계속 진행한다 - 기본값만 못 채울 뿐.
       }
 
       setParsedToc(data.parsedToc);
-      setInitialExcludedKeys(excluded);
+      setInitialExcludedKeys([...excluded]);
       navigate("/select");
     } catch {
       alert("저장된 목차를 찾을 수 없어요. 목차 업로드부터 다시 진행해주세요.");
@@ -176,6 +183,7 @@ function AppRoutes() {
 
   const handleUnitsSelected = (excludedKeys) => {
     setFilteredToc(filterParsedToc(parsedToc, excludedKeys));
+    setLastExcludedKeys(excludedKeys);
     navigate("/calendar");
   };
 
@@ -204,6 +212,7 @@ function AppRoutes() {
           weekdayMinutes,
           checkedDates: calendarInfo.checkedDates,
           userId,
+          excludedLeafKeys: lastExcludedKeys,
         }),
       });
       if (!res.ok) {

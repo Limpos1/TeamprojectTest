@@ -116,26 +116,40 @@ def push_plan_to_firestore(
     """
     build_study_plan_items()로 변환한 문서들을 실제 Firestore "study_plan_items"
     컬렉션에 써준다. clear_existing=True면, 같은 study_plan_id로 이미 들어가 있는
-    예전 항목들을 먼저 지우고 새로 쓴다 ("계획 다시 생성하기"로 재생성했을 때 중복 방지).
+    "오늘 이후" 항목만 먼저 지우고 새로 쓴다 ("계획 다시 생성하기"로 재생성했을 때
+    중복 방지). 오늘 이전(과거) 항목은 진행률 기록을 보존하기 위해 지우지 않는다.
     반환값: 실제로 써진 문서 개수.
     """
+    from datetime import date
     from firebase_admin import firestore
+
+    today_str = date.today().isoformat()  # "YYYY-MM-DD"
 
     db = _get_firestore_client(credentials_path)
     collection = db.collection("study_plan_items")
 
     if clear_existing:
-        existing = collection.where("studyPlanId", "==", study_plan_id).stream()
+        existing = (
+            collection
+            .where("studyPlanId", "==", study_plan_id)
+            .where("planDate", ">=", today_str)  # 오늘 이후 것만 지움
+            .stream()
+        )
         for doc in existing:
             doc.reference.delete()
 
     docs = build_study_plan_items(plan, member_id, study_plan_id)
+
+    written = 0
     for doc in docs:
+        if doc["planDate"] < today_str:
+            continue  # 과거 날짜는 다시 안 씀 (이미 보존된 기록이 있으니까)
         doc["createdAt"] = firestore.SERVER_TIMESTAMP
         doc["updatedAt"] = firestore.SERVER_TIMESTAMP
         collection.add(doc)
+        written += 1
 
-    return len(docs)
+    return written
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +181,33 @@ def fetch_plan_meta(
     if not doc.exists:
         return None
     return doc.to_dict()
+
+
+def mark_leaves_excluded(
+    study_plan_id: str,
+    excluded_keys: list[str],
+    credentials_path: str = "firebase-service-account.json",
+) -> None:
+    """
+    과목 선택 화면에서 체크 해제(제외)한 단원 키를 study_plans/{id}.excludedLeafKeys에
+    계속 누적(arrayUnion)해둔다.
+
+    이걸 안 하면: 제외된 단원은 그 회차 생성 결과(study_plan_items)에 아예 안 들어가서,
+    다음에 "계획 다시 생성하기"를 눌렀을 때 진행률(progressRate)을 확인할 항목 자체가
+    없다 - 그러면 "한 번도 배정된 적 없는 단원"처럼 보여서 기본값이 다시 체크됨으로
+    돌아간다(완료/제외했던 단원이 재생성할 때마다 자꾸 되살아나는 버그). 한 번 제외한
+    기록을 여기 영구히 남겨두면, 그다음부터는 몇 번을 재생성해도 계속 기본 체크
+    해제 상태를 유지한다. (사용자가 그 회차에 다시 체크해서 포함시키는 것 자체는
+    막지 않는다 - 그건 어디까지나 다음 회차 "기본값"에만 영향을 준다.)
+    """
+    from firebase_admin import firestore
+
+    if not excluded_keys:
+        return
+    db = _get_firestore_client(credentials_path)
+    db.collection("study_plans").document(study_plan_id).set(
+        {"excludedLeafKeys": firestore.ArrayUnion(excluded_keys)}, merge=True
+    )
 
 
 # ---------------------------------------------------------------------------
