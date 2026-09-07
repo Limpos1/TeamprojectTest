@@ -112,19 +112,32 @@ def push_plan_to_firestore(
     study_plan_id: str,
     credentials_path: str = "firebase-service-account.json",
     clear_existing: bool = True,
+    clear_from_date: str | None = None,
 ) -> int:
     """
     build_study_plan_items()로 변환한 문서들을 실제 Firestore "study_plan_items"
-    컬렉션에 써준다. clear_existing=True면, 같은 study_plan_id로 이미 들어가 있는
-    예전 항목들을 먼저 지우고 새로 쓴다 ("계획 다시 생성하기"로 재생성했을 때 중복 방지).
-    반환값: 실제로 써진 문서 개수.
+    컬렉션에 써준다.
+
+    - clear_existing=True (기본값, 목차를 처음부터 새로 파싱해서 "완전히 새 플랜"을
+      만드는 /generate-plan 용): 같은 study_plan_id의 기존 항목을 전부 지우고 새로 쓴다.
+    - clear_from_date="yyyy-MM-dd"를 넘기면(재생성/replan 용): 그 날짜 "이전" 항목은
+      그대로 두고(이미 지나간 날짜의 완료 여부·기록 보존), 그 날짜 "이상"인 항목만 지운
+      뒤 새로 쓴다. clear_existing과 동시에 켤 필요는 없다 - clear_from_date가 있으면
+      그쪽을 우선한다.
+
+    반환값: 실제로 새로 써진 문서 개수.
     """
     from firebase_admin import firestore
 
     db = _get_firestore_client(credentials_path)
     collection = db.collection("study_plan_items")
 
-    if clear_existing:
+    if clear_from_date is not None:
+        existing = collection.where("studyPlanId", "==", study_plan_id).stream()
+        for doc in existing:
+            if doc.to_dict().get("planDate", "") >= clear_from_date:
+                doc.reference.delete()
+    elif clear_existing:
         existing = collection.where("studyPlanId", "==", study_plan_id).stream()
         for doc in existing:
             doc.reference.delete()
@@ -136,6 +149,104 @@ def push_plan_to_firestore(
         collection.add(doc)
 
     return len(docs)
+
+
+def fetch_raw_items_from_firestore(
+    study_plan_id: str, credentials_path: str = "firebase-service-account.json"
+) -> list[dict]:
+    """study_plan_id에 속한 Firestore 문서를 가공 없이(doc.id 포함) 그대로 반환한다."""
+    db = _get_firestore_client(credentials_path)
+    docs = db.collection("study_plan_items").where("studyPlanId", "==", study_plan_id).stream()
+    items = []
+    for doc in docs:
+        data = doc.to_dict()
+        data["id"] = doc.id
+        items.append(data)
+    return items
+
+
+# ---------------------------------------------------------------------------
+# 플랜 메타데이터(원본 목차 + 생성 파라미터 + 생성 결과) 저장/조회
+# "계획 다시 생성하기"(남은 분량만 재배분)를 하려면, 프론트가 목차를 다시 안 올려도
+# 되게 원본 parsedToc와 이번에 배분한 결과(days)를 같이 들고 있어야 한다.
+# ---------------------------------------------------------------------------
+
+def save_plan_meta(
+    study_plan_id: str,
+    parsed_toc: dict,
+    target_date: str,
+    weekday_minutes: dict,
+    generated_days: list[dict],
+    credentials_path: str = "firebase-service-account.json",
+) -> None:
+    from firebase_admin import firestore
+
+    db = _get_firestore_client(credentials_path)
+    db.collection("study_plans").document(study_plan_id).set({
+        "parsedToc": parsed_toc,
+        "targetDate": target_date,
+        "weekdayMinutes": weekday_minutes,
+        "generatedDays": generated_days,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    })
+
+
+def fetch_plan_meta(
+    study_plan_id: str, credentials_path: str = "firebase-service-account.json"
+) -> dict | None:
+    db = _get_firestore_client(credentials_path)
+    doc = db.collection("study_plans").document(study_plan_id).get()
+    if not doc.exists:
+        return None
+    return doc.to_dict()
+
+
+def compute_remaining_leaves(parsed_toc: dict, generated_days: list[dict], raw_items: list[dict]) -> list[dict]:
+    """
+    "계획 다시 생성하기"의 핵심: 원래 목차(parsed_toc)의 각 단원(leaf)에서, 이미
+    완료 처리(progressRate=100)된 페이지만큼을 빼고 남은 페이지만 다시 스케줄링
+    대상으로 돌려준다.
+
+    - generated_days: 이번 플랜을 처음 만들 때 schedule.generate_plan_from_leaves()가
+      반환한 "days"(각 항목에 title/subject/pagesToday/totalPages가 있음). 이게
+      study_plan_items에 쓰여진 순서(날짜 오름차순 -> sortOrder 오름차순)와 정확히
+      1:1로 대응한다는 전제로 raw_items와 짝지어 진행률을 읽는다.
+    - raw_items: fetch_raw_items_from_firestore()의 결과 (planDate, sortOrder,
+      progressRate를 가짐).
+    - 반환값: schedule._get_leaf_items()와 같은 형태
+      ({"title","subject","pageCount","startPage"})의 leaves 리스트. 이미 다 끝난
+      단원은 빠지고, 진행 중이던 단원은 남은 페이지 수 + 새 startPage로 들어간다.
+    """
+    from schedule import _get_leaf_items
+
+    progress_by_key = {
+        (it.get("planDate"), it.get("sortOrder")): it.get("progressRate", 0) for it in raw_items
+    }
+
+    consumed_by_leaf: dict[tuple, int] = {}
+    for day in generated_days:
+        plan_date = day["date"]
+        for sort_order, item in enumerate(day.get("items", [])):
+            progress = progress_by_key.get((plan_date, sort_order), 0)
+            if progress >= 100:
+                leaf_key = (item.get("subject"), item["title"])
+                consumed_by_leaf[leaf_key] = consumed_by_leaf.get(leaf_key, 0) + item.get("pagesToday", 0)
+
+    remaining = []
+    for leaf in _get_leaf_items(parsed_toc):
+        leaf_key = (leaf.get("subject"), leaf["title"])
+        done = consumed_by_leaf.get(leaf_key, 0)
+        remaining_pages = leaf["pageCount"] - done
+        if remaining_pages <= 0:
+            continue
+        new_start_page = (leaf["startPage"] + done) if leaf["startPage"] is not None else None
+        remaining.append({
+            "title": leaf["title"],
+            "subject": leaf.get("subject"),
+            "pageCount": remaining_pages,
+            "startPage": new_start_page,
+        })
+    return remaining
 
 
 # ---------------------------------------------------------------------------

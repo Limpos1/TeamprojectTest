@@ -107,17 +107,35 @@ def generate_study_plan(
     weekday_minutes: {"월": 60, ..., "토": 180, "일": 180} 형태의 요일별 가용 시간(분).
     excluded_dates: 학습이 불가능한 날짜 목록
 
+    반환값은 generate_plan_from_leaves()와 동일하다. 목차 전체를 처음부터 배분할 때 쓰고,
+    "계획 다시 생성하기"(남은 분량만 재배분)처럼 leaves를 직접 들고 있는 경우엔
+    generate_plan_from_leaves()를 바로 쓰면 된다.
+    """
+    leaves = _get_leaf_items(parsed_toc)
+    return generate_plan_from_leaves(leaves, start_date, target_date, weekday_minutes, excluded_dates)
+
+
+def generate_plan_from_leaves(
+    leaves: list[dict],
+    start_date: datetime.date,
+    target_date: datetime.date,
+    weekday_minutes: dict[str, int],
+    excluded_dates: list[datetime.date] | None = None,
+) -> dict:
+    """
+    generate_study_plan()의 실제 배분 로직. leaves(각 {"title","subject","pageCount","startPage"})를
+    직접 받아서, generate_study_plan()과 "재생성(남은 분량만)" 양쪽에서 재사용한다.
+
     반환값:
     {
         "days": [{"date": "2026-08-25", "minutes": 60,
-                   "items": [{"title": ..., "pagesToday": 8, "totalPages": 32,
+                   "items": [{"title": ..., "subject": ..., "pagesToday": 8, "totalPages": 32,
                               "pageRange": "55~62p", "status": "시작"}]}],
         "totalPages": ...,
         "totalMinutes": ...,
         "warnings": [...],
     }
     """
-    leaves = _get_leaf_items(parsed_toc)
     total_pages = sum(l["pageCount"] for l in leaves)
 
     days = _study_days(start_date, target_date, excluded_dates)
@@ -169,6 +187,7 @@ def generate_study_plan(
             )
             items.append({
                 "title": current["title"],
+                "subject": current.get("subject"),
                 "pagesToday": take,
                 "totalPages": current["pageCount"],
                 "pageRange": page_range,
